@@ -44,9 +44,14 @@ Invoke the bundle as a subprocess and send the payload as a single JSON line on
 stdin. The **last non-empty stdout line** is the JSON report; earlier lines are
 diagnostic logs (ignore them).
 
+`dump_runtime_asset` materializes the verified engine `reverseloom-sandbox.bundle.js`
+into the session artifact directory and registers it as a runtime mount, so it
+travels with the delivery automatically. Invoke it by that session-relative
+filename — never hand-roll a jsdom setup of your own.
+
 ```python
 node = os.environ.get("REVERSELOOM_NODE_PATH") or "node"
-bundle = os.environ["REVERSELOOM_SANDBOX_BUNDLE"]
+bundle = "reverseloom-sandbox.bundle.js"  # materialized next to your wrapper by dump_runtime_asset
 proc = subprocess.run(
     [node, bundle],
     input=json.dumps(payload),
@@ -59,7 +64,7 @@ proc = subprocess.run(
 report = json.loads(proc.stdout.splitlines()[-1])
 ```
 
-Write the Python wrapper and all dumped scripts, WASM files, and fixtures into the current artifact directory. Execute the wrapper with `run_shell`; its environment exposes the bundled Node executable, sandbox bundle, and `NODE_PATH`. Use relative filenames inside the payload so all runtime resources remain colocated.
+Write the Python wrapper and all dumped scripts, WASM files, and fixtures into the current artifact directory. Execute the wrapper with `run_shell`; its environment exposes the bundled Node executable and `NODE_PATH`. Use relative filenames inside the payload so all runtime resources remain colocated. Do not reimplement the sandbox engine, and do not write a standalone generator that builds its own jsdom/window environment — always drive the materialized `reverseloom-sandbox.bundle.js`.
 
 ---
 

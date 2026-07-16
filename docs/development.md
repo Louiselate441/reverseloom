@@ -119,6 +119,17 @@ cd C:\pycharm_workspace\reverseloom
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
+准备随包分发的爬虫 Python 运行时（自包含 CPython + curl_cffi 及其全部依赖，
+供 agent 生成的爬虫通过 `run_shell` 调用，用户无需自备 Python）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_pybin.py build\pybin
+$env:REVERSELOOM_PYBIN_DIR = "$PWD\build\pybin"
+```
+
+> 不设 `REVERSELOOM_PYBIN_DIR` 也能打包，但产物不含 Python 运行时，agent 爬虫会
+> 回退到用户系统 Python。`prepare_pybin.py` 仅支持 Windows（python.org embeddable）。
+
 执行打包：
 
 ```powershell

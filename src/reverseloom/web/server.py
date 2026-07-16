@@ -53,6 +53,25 @@ async def _send(ws: WebSocket, payload: Dict[str, Any]) -> None:
         pass
 
 
+def _log_ws_fatal(context: str, exc: BaseException) -> None:
+    """Persist a full traceback to the log dir. Frozen builds run with
+    console=False, so an uncaught error is otherwise invisible; this is how a
+    packaged WebSocket failure becomes diagnosable."""
+    import traceback
+
+    try:
+        from reverseloom.runtime.paths import default_log_dir
+
+        log_dir = default_log_dir()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with open(log_dir / "ws-errors.log", "a", encoding="utf-8") as handle:
+            handle.write(f"\n=== {datetime.now(timezone.utc).isoformat()} {context} ===\n")
+            handle.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    except Exception:
+        # Diagnostics must never mask the original failure.
+        pass
+
+
 async def _delete_checkpoint_thread(checkpointer: Any, session_id: str) -> None:
     if checkpointer is None or not hasattr(checkpointer, "adelete_thread"):
         return
@@ -376,7 +395,20 @@ def create_app() -> FastAPI:
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
-        from reverseloom.agent.build import build_llm, build_agent
+        # Importing the agent stack pulls in graphloom/langgraph/litellm lazily.
+        # In a frozen build a missing hidden import raises here; without this
+        # guard the exception escapes ws_endpoint, the socket is torn down, and
+        # the client reconnect-loops with no diagnosis. Log it and tell the UI.
+        try:
+            from reverseloom.agent.build import build_llm, build_agent
+        except Exception as exc:
+            _log_ws_fatal("agent import failed", exc)
+            await _send(ws, {
+                "type": "error",
+                "text": f"引擎加载失败：{type(exc).__name__}: {exc}",
+            })
+            await ws.close(code=1011)
+            return
 
         try:
             llm = build_llm()
@@ -388,7 +420,16 @@ def create_app() -> FastAPI:
             await ws.close(code=4001)
             return
 
-        agent = build_agent(llm=llm, checkpointer=ws.app.state.checkpointer)
+        try:
+            agent = build_agent(llm=llm, checkpointer=ws.app.state.checkpointer)
+        except Exception as exc:
+            _log_ws_fatal("build_agent failed", exc)
+            await _send(ws, {
+                "type": "error",
+                "text": f"引擎初始化失败：{type(exc).__name__}: {exc}",
+            })
+            await ws.close(code=1011)
+            return
         store = ws.app.state.store if getattr(ws.app.state, "store_ready", False) else None
         session_id = uuid4().hex[:12]
         run_task: asyncio.Task | None = None

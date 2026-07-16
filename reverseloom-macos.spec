@@ -6,6 +6,12 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 block_cipher = None
+
+# NOTE: no bundled Python runtime on macOS. python.org ships no macOS
+# "embeddable" package, so agent-generated crawlers run against the user's
+# system python3 here (see README). The app itself never imports curl_cffi, so
+# nothing curl-related is bundled into the .app.
+
 target_arch = os.environ.get("REVERSELOOM_MAC_ARCH") or None
 codesign_identity = os.environ.get("REVERSELOOM_CODESIGN_IDENTITY") or None
 entitlements_file = os.environ.get("REVERSELOOM_ENTITLEMENTS_FILE") or None
@@ -23,6 +29,10 @@ datas = [
     ("src/reverseloom/skills", "reverseloom/skills"),
     ("src/reverseloom/browser/sandbox_env", "reverseloom/browser/sandbox_env"),
     *collect_data_files("patchright"),
+    # litellm ships JSON data files (e.g. model_prices_and_context_window_backup.json)
+    # that collect_submodules does NOT gather; without them build_llm() raises
+    # FileNotFoundError at import time.
+    *collect_data_files("litellm"),
 ]
 
 hiddenimports = (

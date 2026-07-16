@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from datetime import datetime, timezone, timedelta
 from typing import List, Any, Dict, Optional, Tuple, Literal
 from urllib.parse import urlparse
@@ -1241,9 +1242,6 @@ async def search_in_js_codes(
     When omitted, every tab in the session is searched and results are grouped per tab.
     """
     session_id = str(kwargs.get("session_id", ""))
-    _credit = session_store.get(session_id, "analysis_credit", set()) or set()
-    _credit.add("search_in_js_codes")
-    session_store.set(session_id, "analysis_credit", _credit)
     session = browser_manager.get_session(session_id)
 
     scopes = _iter_tab_scopes(session, tab_index)
@@ -1414,9 +1412,6 @@ async def break_on_request(
     Tab scoping: pass `tab_index` to arm the breakpoint on a specific tab's CDP session.
     """
     session_id = str(kwargs.get("session_id", ""))
-    _credit = session_store.get(session_id, "analysis_credit", set()) or set()
-    _credit.add("break_on_request")
-    session_store.set(session_id, "analysis_credit", _credit)
     session = browser_manager.get_session(session_id)
     try:
         tab_idx, page, handler, cdp = _resolve_tab(session, tab_index)
@@ -1638,9 +1633,6 @@ async def get_paused_state(frame_index: int = 0, **kwargs) -> str:
     Use `frame_index` to switch between different stack frame contexts.
     """
     session_id = str(kwargs.get("session_id", ""))
-    _credit = session_store.get(session_id, "analysis_credit", set()) or set()
-    _credit.add("get_paused_state")
-    session_store.set(session_id, "analysis_credit", _credit)
     session = browser_manager.get_session(session_id)
     event = getattr(session.cdp_handler, "last_paused_event", None)
     if not event:
@@ -1741,9 +1733,6 @@ async def get_script_source(
     Tab scoping: pass `tab_index` matching the [Tab N] label from search_in_js_codes.
     """
     session_id = str(kwargs.get("session_id", ""))
-    _credit = session_store.get(session_id, "analysis_credit", set()) or set()
-    _credit.add("get_script_source")
-    session_store.set(session_id, "analysis_credit", _credit)
     session = browser_manager.get_session(session_id)
     try:
         tab_idx, page, handler, cdp = _resolve_tab(session, tab_index)
@@ -1829,9 +1818,6 @@ async def set_line_breakpoint(
     search_in_js_codes, otherwise the breakpoint targets the active tab.
     """
     session_id = str(kwargs.get("session_id", ""))
-    _credit = session_store.get(session_id, "analysis_credit", set()) or set()
-    _credit.add("set_line_breakpoint")
-    session_store.set(session_id, "analysis_credit", _credit)
     session = browser_manager.get_session(session_id)
     try:
         tab_idx, page, handler, cdp = _resolve_tab(session, tab_index)
@@ -2170,6 +2156,36 @@ def _register_dumped_asset(session_id: str, filepath: str, summary: str, produce
     session_store.set(session_id, "delivery_status", delivery_status)
 
 
+def _materialize_sandbox_bundle(session_id: str, artifact_dir: str, producer: str = "") -> None:
+    """Copy the project-bundled, verified sandbox engine into the session dir
+    (if not already present) and register it as a runtime mount so it rides
+    along with the delivery. This lets the replay wrapper reference the bundle
+    by a session-relative filename and guarantees the coder receives the exact
+    verified engine — never a hand-rolled jsdom rebuild."""
+    from pathlib import Path
+
+    bundle_src = (
+        Path(__file__).parents[2] / "browser" / "sandbox_env" / "reverseloom-sandbox.bundle.js"
+    )
+    if not bundle_src.is_file():
+        return
+    dest = os.path.join(artifact_dir, bundle_src.name)
+    if not os.path.isfile(dest):
+        try:
+            shutil.copy2(str(bundle_src), dest)
+        except OSError:
+            return
+    try:
+        size = os.path.getsize(dest)
+    except OSError:
+        size = 0
+    _register_dumped_asset(
+        session_id, dest,
+        f"reverseloom sandbox engine (Node + jsdom) required to run generators offline ({size} bytes)",
+        producer=producer,
+    )
+
+
 @tool("dump_runtime_asset", args_schema=DumpRuntimeAssetInput)
 async def dump_runtime_asset(
     request_id: str = "",
@@ -2197,26 +2213,16 @@ async def dump_runtime_asset(
         or kwargs.get("current_agent_name")
         or ""
     ).strip()
-    _credit = session_store.get(session_id, "analysis_credit", set()) or set()
-    _dump_allowed = (
-        "search_in_js_codes" in _credit
-        or "get_script_source" in _credit
-        or ("set_line_breakpoint" in _credit and "get_paused_state" in _credit)
-    )
-    if not _dump_allowed:
-        return (
-            "⏸ You should analyze the generator's interface before dumping assets.\n"
-            "Use one of these analysis paths first:\n"
-            "  Path A: set_line_breakpoint → get_paused_state → evaluate_in_call_frame\n"
-            "  Path B: search_in_js_codes → get_script_source\n"
-            "Once you understand the generator's entry function, parameters, and call method, "
-            "come back to dump the asset."
-        )
     from reverseloom.runtime.config import SESSION_BASE_DIR
     from urllib.parse import urlsplit
 
     artifact_dir = os.path.join(SESSION_BASE_DIR, session_id)
     os.makedirs(artifact_dir, exist_ok=True)
+
+    # Dumping an asset means the agent is heading into sandbox reproduction;
+    # ship the verified sandbox engine alongside so the delivery is complete
+    # and the agent never rebuilds the runtime by hand.
+    _materialize_sandbox_bundle(session_id, artifact_dir, producer=producer)
 
     session = browser_manager.get_session(session_id)
 

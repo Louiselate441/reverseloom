@@ -130,7 +130,7 @@ Before the pilot, verify only the imports required by the generated crawler. Do 
 Set `timeout_seconds` according to the expected run. Keep stdout to progress summaries; write records and verbose logs to files. The shell environment provides:
 
 - `REVERSELOOM_ARTIFACT_DIR`;
-- `REVERSELOOM_PYTHON_PATH` for the active Python environment in source or pip installations;
+- `python` / `python3` on `PATH` resolve to reverseloom's own interpreter (with bundled deps such as `curl_cffi`) in every install mode; `REVERSELOOM_PYTHON_PATH` also points to it;
 - `REVERSELOOM_NODE_PATH` when Patchright's bundled Node is available;
 - `REVERSELOOM_SANDBOX_BUNDLE` when the reverse sandbox bundle is packaged;
 - `NODE_PATH` for the bundled sandbox runtime.

@@ -73,6 +73,21 @@ def _decode_shell_output(value: bytes | str | None) -> str:
     return value.decode("utf-8", errors="replace")
 
 
+def _frozen_python_dir() -> str | None:
+    """In a frozen build, sys.executable is the windowed app, not a Python
+    interpreter. The build ships a self-contained CPython (python.org
+    embeddable) under _internal/pybin/ with a real python.exe. Return that
+    directory so it can be prepended to PATH; agent crawlers then call a real
+    `python` that natively parses every flag and imports the bundled curl_cffi.
+    Returns None if the runtime isn't present (falls back to system Python)."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return None
+    pybin = Path(meipass) / "pybin"
+    exe = pybin / ("python.exe" if os.name == "nt" else "bin/python3")
+    return str(exe.parent) if exe.is_file() else None
+
+
 def _shell_env(artifact_dir: str) -> dict[str, str]:
     env = os.environ.copy()
     env["REVERSELOOM_ARTIFACT_DIR"] = artifact_dir
@@ -83,6 +98,14 @@ def _shell_env(artifact_dir: str) -> dict[str, str]:
         current = env.get("PATH", "")
         python_dir = str(Path(python_executable).parent)
         env["PATH"] = python_dir + (os.pathsep + current if current else "")
+    else:
+        # Frozen: expose the bundled self-contained CPython on PATH.
+        python_dir = _frozen_python_dir()
+        if python_dir:
+            exe_name = "python.exe" if os.name == "nt" else "python3"
+            env["REVERSELOOM_PYTHON_PATH"] = str(Path(python_dir) / exe_name)
+            current = env.get("PATH", "")
+            env["PATH"] = python_dir + (os.pathsep + current if current else "")
 
     sandbox_dir = Path(__file__).parents[1] / "browser" / "sandbox_env"
     bundle = sandbox_dir / "reverseloom-sandbox.bundle.js"

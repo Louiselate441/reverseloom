@@ -15,14 +15,17 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-success)](LICENSE)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 
+[![Download Windows EXE](https://img.shields.io/badge/⬇%20Download-Windows%20EXE-2ea44f?style=for-the-badge)](https://github.com/KuiChi-x/reverseloom/releases)
+
 [中文](README.zh-CN.md) · **English** · [Three walls](#three-walls) · [Full power](#full-power) · [Quick start](#quick-start) · [Capabilities](#capabilities)
 
 </div>
 
 <div align="center">
 
-<!-- 📹 Demo GIF: drop your recording at docs/demo.gif and uncomment the next line -->
-<!-- <img src="docs/demo.gif" alt="reverseloom demo" width="760" /> -->
+<!-- 📹 Record a demo, save it to docs/demo.gif, and uncomment the next line to replace the static screenshot below -->
+<!-- <img src="docs/demo.gif" alt="reverseloom demo" width="820" /> -->
+<img src="docs/image/homepage.png" alt="reverseloom desktop UI" width="820" />
 
 _Type one line in the desktop UI. Watch it reason, drive the browser, set breakpoints, reproduce the algorithm, and produce a crawler — live on the right._
 
@@ -82,7 +85,25 @@ Anyone who's built a scraper knows there are three walls between you and the dat
 
 <a id="quick-start"></a>
 
-## 🚀 Quick start (60 seconds)
+## 🚀 Quick start
+
+Two ways — pick one. First, the honest prerequisites so nothing fails silently after install:
+
+- ✅ **You need a Chromium-based browser installed** (Chrome / Edge / Chromium / Brave — most machines have one). reverseloom only drives it and **never downloads Chromium**.
+- 💡 For full "any site lets you in" anti-detection, also install [kc-browser](https://github.com/KuiChi-x/kc-browser) — see [Full power](#full-power).
+- 🐍 The Windows EXE ships its own Python runtime (with `curl_cffi` and the crawler dependencies), so the crawlers it generates run via `run_shell` with zero extra setup. On macOS you still need a callable system `python3` for that.
+
+### Option A: download the EXE, run it (Windows, try this first)
+
+No Python, no environment setup.
+
+1. Grab the latest `reverseloom-win.exe` from [**Releases**](https://github.com/KuiChi-x/reverseloom/releases);
+2. Double-click — a native desktop window opens;
+3. In **Settings → Model** fill in your model's `BASE_URL` / `API Key` / `MODEL` (see [Configure](#configure)) and save.
+
+> Three steps, chatting within 3 minutes. To scrape sites with heavy bot detection, wire up kc-browser per [Full power](#full-power).
+
+### Option B: run from source (developers / macOS / Linux)
 
 reverseloom depends on [graphloom](https://github.com/KuiChi-x/graphloom):
 
@@ -106,9 +127,15 @@ python -m reverseloom --web    # or: serve only, open in your system browser
 
 The sandbox engine ships prebuilt as `reverseloom-sandbox.bundle.js` — **works out of the box**. To rebuild: `npm install && npm run build` in `src/reverseloom/browser/sandbox_env/`.
 
+<a id="configure"></a>
+
 ### Configure
 
-Minimal `.env`. The model must support **image input + streaming output**:
+Fill the model in the UI under **Settings → Model** (EXE users), or via `.env` (source users). The model must support **image input + streaming output**:
+
+<div align="center"><img src="docs/image/model_setting.png" alt="Model settings screen" width="720" /></div>
+
+Minimal `.env`:
 
 ```dotenv
 MODEL_PROTOCOL=openai                    # openai / anthropic / gemini / deepseek / ollama ...
@@ -197,10 +224,16 @@ Ordinary anti-detection "patches" the JS layer: erase `navigator.webdriver`, spo
 - 🌱 **One seed = one self-consistent identity** — a 64-bit seed deterministically derives the whole fingerprint; GPU sampled from ~130 real consumer cards by market share, locale/timezone aligned to the exit IP across 95+ regions.
 - 🔄 **Rotate identity without restarting**, present as Windows / macOS / Linux at will, headless or headed.
 
-reverseloom already speaks its interface — the `--fp-seed` / `--fp-timezone` / `--fp-platform` args in `fingerprint.py` are exactly kc-browser's flags. **Point it there and any site lets you in:**
+reverseloom already speaks its interface — the `--fp-seed` / `--fp-timezone` / `--fp-platform` args in `fingerprint.py` are exactly kc-browser's flags. **Point it there and any site lets you in.**
+
+Just set the browser executable to kc-browser under **Settings → Browser & proxy tunnel**:
+
+<div align="center"><img src="docs/image/browser_setting.png" alt="Browser path settings screen" width="720" /></div>
+
+Source users can use an env var instead:
 
 ```dotenv
-# After downloading kc-browser, give reverseloom its executable path (or set it in the UI's Settings)
+# Give reverseloom the executable path
 REVERSELOOM_BROWSER_PATH=/path/to/kc-browser
 ```
 
