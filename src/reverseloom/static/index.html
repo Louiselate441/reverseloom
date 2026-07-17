@@ -1281,7 +1281,7 @@ $('artCopy').onclick = copySelectedArtifact;
 $('artDownload').onclick = () => { if (selectedArtifact?.path) void openExternalUrl(new URL(`/api/sessions/${encodeURIComponent(sessionId)}/artifact?path=${encodeURIComponent(selectedArtifact.path)}`, location.href).href); };
 $('setClose').onclick = $('artClose').onclick = $('scrim').onclick = closeModal;
 
-renderEmpty(); connect(); loadSessions(true);
+renderEmpty(); connect(); loadSessions();
 </script>
 </body>
 </html>
