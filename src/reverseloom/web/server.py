@@ -22,6 +22,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 
+from graphloom.util.session_store import session_store
+
 from reverseloom.runtime import config
 from reverseloom.runtime import settings as settings_io
 from reverseloom.runtime.checkpoints import CheckpointerManager
@@ -328,18 +330,32 @@ def create_app() -> FastAPI:
 
     @app.get("/api/sessions/{session_id}/artifacts")
     async def list_artifacts(session_id: str):
-        """List files the agent wrote for this session with preview metadata."""
+        """List the session's curated artifacts (registered in delivery_status),
+        not raw scratch files. Mirrors what deliver_artifact would hand off:
+        write_artifact outputs, dumps, and mounted runtime dependencies — while
+        excluding process scratch (probes, logs, .pyc, todo.md) that tools like
+        write_file / run_shell drop into the same working directory."""
         base = os.path.abspath(config.artifact_dir(session_id))
         if not os.path.isdir(base):
             return JSONResponse([])
+        delivery_status = session_store.get(session_id, "delivery_status", {}) or {}
         out = []
-        for root, _dirs, files in os.walk(base):
-            for name in files:
-                target = os.path.join(root, name)
-                try:
-                    out.append(artifact_metadata(base, target))
-                except OSError:
-                    pass
+        seen = set()
+        for entry in delivery_status.values():
+            raw_path = str((entry or {}).get("path") or "").strip()
+            if not raw_path:
+                continue
+            target = os.path.realpath(raw_path)
+            if target in seen or not os.path.isfile(target):
+                continue
+            seen.add(target)
+            try:
+                meta = artifact_metadata(base, target)
+            except OSError:
+                continue
+            meta["tags"] = list((entry or {}).get("tags") or [])
+            meta["summary"] = str((entry or {}).get("summary") or "")
+            out.append(meta)
         out.sort(key=lambda item: (item["modified_at"], item["path"]))
         return JSONResponse(out[:500])
 

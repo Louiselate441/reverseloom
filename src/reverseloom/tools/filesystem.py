@@ -326,7 +326,7 @@ def _mount_runtime_files(
         _register_dumped_asset(
             session_id, dest,
             f"Runtime dependency mounted for sandbox replay ({size} bytes)",
-            producer=producer,
+            producer=producer, kind="runtime_mount",
         )
         mounted.append(name)
     return mounted

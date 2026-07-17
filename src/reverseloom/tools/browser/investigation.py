@@ -2135,10 +2135,15 @@ class DumpRuntimeAssetInput(StandardThoughtInput):
     filename: str = Field(default="", description="Optional output filename. If omitted, infer from URL/mimeType.")
 
 
-def _register_dumped_asset(session_id: str, filepath: str, summary: str, producer: str = "") -> None:
-    """Register a dumped runtime asset into delivery_status so it ends up in
-    current_delivery_manifest on delivery. Tagged `skip_audit` so find_fault
-    nodes don't try to review a raw JS/WASM dump on content."""
+def _register_dumped_asset(
+    session_id: str, filepath: str, summary: str, producer: str = "", kind: str = "dump",
+) -> None:
+    """Register a runtime asset into delivery_status. `skip_audit` keeps find_fault
+    from reviewing a raw JS/WASM dump on content. `kind` controls delivery: a
+    plain `dump` is a candidate the agent may inspect but that does NOT auto-ship;
+    only `runtime_mount` (assigned when a file is actually mounted for a run) is
+    auto-promoted into the delivery. This keeps analysis-only source dumps out of
+    the handoff while true runtime dependencies still ride along."""
     filename = os.path.basename(filepath)
     if not filename:
         return
@@ -2149,7 +2154,7 @@ def _register_dumped_asset(session_id: str, filepath: str, summary: str, produce
         "fatal_gaps": [],
         "recommended_rework": [],
         "summary": summary,
-        "tags": ["skip_audit", "kind:runtime_mount"],
+        "tags": ["skip_audit", f"kind:{kind}"],
         "producer": producer,
     }
     session_store.set(session_id, "delivery_status", delivery_status)
